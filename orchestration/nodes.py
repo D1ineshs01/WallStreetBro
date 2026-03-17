@@ -5,7 +5,7 @@ Each function: (state: AgentState) -> dict (partial state update).
 
 import asyncio
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timezone, date
 from typing import List
 
 import structlog
@@ -73,6 +73,11 @@ async def ingestion_node(state: AgentState) -> dict:
 
         # Generate trade signals from high-confidence events
         signals = _generate_signals_from_events(new_events)
+
+        # Fallback: if Grok found nothing today, place a daily SPY + GLD order
+        if not signals:
+            fallback_signals = await _generate_fallback_signals(redis)
+            signals.extend(fallback_signals)
 
         log.info("ingestion_node_complete", new_events=len(event_dicts), signals=len(signals))
 
@@ -249,4 +254,58 @@ def _generate_signals_from_events(events) -> List[TradeSignal]:
                 )
             )
 
+    return signals
+
+
+async def _generate_fallback_signals(redis) -> List[TradeSignal]:
+    """
+    Daily fallback strategy: if Grok produces no signals, buy SPY and GLD once per day.
+    Uses Redis to ensure the fallback only fires once per trading day.
+    Only runs during US market hours (9:30am - 4:00pm ET).
+    """
+    from zoneinfo import ZoneInfo
+
+    et = ZoneInfo("America/New_York")
+    now_et = datetime.now(et)
+
+    # Only fire during market hours
+    market_open = now_et.replace(hour=9, minute=30, second=0, microsecond=0)
+    market_close = now_et.replace(hour=16, minute=0, second=0, microsecond=0)
+    if not (market_open <= now_et <= market_close):
+        log.debug("fallback_skipped_outside_market_hours")
+        return []
+
+    # Check if fallback already placed today
+    today_key = f"fallback:daily_order:{date.today().isoformat()}"
+    already_placed = await redis.client.get(today_key)
+    if already_placed:
+        log.debug("fallback_already_placed_today")
+        return []
+
+    # Mark as placed for today (expires at midnight)
+    seconds_until_midnight = (
+        now_et.replace(hour=23, minute=59, second=59) - now_et
+    ).seconds
+    await redis.client.setex(today_key, seconds_until_midnight, "1")
+
+    signals = []
+    for symbol in ["SPY", "GLD"]:
+        signals.append(
+            TradeSignal(
+                signal_id=str(uuid.uuid4()),
+                symbol=symbol,
+                direction="buy",
+                rationale=(
+                    f"Daily fallback strategy: no Grok market events detected today. "
+                    f"Placing routine buy order for {symbol} as baseline position."
+                ),
+                confidence=0.75,
+                suggested_qty=5,
+                suggested_limit_price=None,
+                generated_by="fallback_strategy",
+                timestamp=datetime.now(timezone.utc).isoformat(),
+            )
+        )
+
+    log.info("fallback_signals_generated", symbols=["SPY", "GLD"])
     return signals
