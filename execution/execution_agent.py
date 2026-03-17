@@ -19,6 +19,7 @@ from core.redis_client import RedisClient
 from core.state import AgentState, TradeExecution, TradeSignal
 from execution.alpaca_mcp_server import AlpacaMCPServer
 from execution.trade_schemas import ALL_EXECUTION_TOOLS
+from notifications.email_alerts import send_trade_alert
 
 log = structlog.get_logger(__name__)
 
@@ -158,6 +159,16 @@ class ExecutionAgent:
                 order_id=execution["order_id"],
                 symbol=execution["symbol"],
                 side=execution["side"],
+            )
+            send_trade_alert(
+                symbol=execution["symbol"],
+                side=execution["side"],
+                qty=execution["qty"],
+                order_type=execution["order_type"],
+                limit_price=execution.get("limit_price"),
+                status=execution["status"],
+                order_id=execution["order_id"],
+                rationale=signal.get("rationale", "No rationale provided."),
             )
             return execution
 
