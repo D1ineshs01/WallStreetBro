@@ -8,13 +8,18 @@ Architecture note: Streamlit runs in its own process separate from
 the FastAPI backend and agent loop, communicating via REST + SSE.
 """
 
+import os
+import sys
+
 import requests
 import streamlit as st
 from streamlit_autorefresh import st_autorefresh
 
-from dashboard.frontend.components import candlestick, event_feed, kpi_metrics
+# Fix import path for Streamlit Cloud
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from components import candlestick, event_feed, kpi_metrics
 
-API_BASE = "http://localhost:8000/api/v1"
+API_BASE = os.environ.get("API_BASE_URL", "http://localhost:8000") + "/api/v1"
 
 # ── Page config ────────────────────────────────────────────────────────
 st.set_page_config(
