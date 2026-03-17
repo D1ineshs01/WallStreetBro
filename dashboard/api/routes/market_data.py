@@ -46,19 +46,52 @@ async def get_bars(
         bars = client.get_stock_bars(req)
         bar_list = bars[symbol.upper()] if symbol.upper() in bars else []
 
+        if bar_list:
+            return {
+                "symbol": symbol.upper(),
+                "timeframe": timeframe,
+                "bars": [
+                    {
+                        "timestamp": str(b.timestamp),
+                        "open": float(b.open),
+                        "high": float(b.high),
+                        "low": float(b.low),
+                        "close": float(b.close),
+                        "volume": int(b.volume),
+                    }
+                    for b in bar_list
+                ],
+            }
+
+        # Alpaca returned no data — fall back to yfinance (free, no API key needed)
+        import yfinance as yf
+
+        period_map = {
+            "1Min": ("7d", "1m"),
+            "5Min": ("60d", "5m"),
+            "15Min": ("60d", "15m"),
+            "1Hour": ("730d", "1h"),
+            "1Day": ("max", "1d"),
+        }
+        yf_period, yf_interval = period_map.get(timeframe, ("max", "1d"))
+        ticker = yf.Ticker(symbol.upper())
+        df = ticker.history(period=yf_period, interval=yf_interval)
+        df = df.tail(limit)
+
         return {
             "symbol": symbol.upper(),
             "timeframe": timeframe,
+            "source": "yfinance",
             "bars": [
                 {
-                    "timestamp": str(b.timestamp),
-                    "open": float(b.open),
-                    "high": float(b.high),
-                    "low": float(b.low),
-                    "close": float(b.close),
-                    "volume": int(b.volume),
+                    "timestamp": str(ts),
+                    "open": float(row["Open"]),
+                    "high": float(row["High"]),
+                    "low": float(row["Low"]),
+                    "close": float(row["Close"]),
+                    "volume": int(row["Volume"]),
                 }
-                for b in bar_list
+                for ts, row in df.iterrows()
             ],
         }
     except Exception as exc:
