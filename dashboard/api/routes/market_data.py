@@ -23,6 +23,7 @@ async def get_bars(
     from alpaca.data.historical import StockHistoricalDataClient
     from alpaca.data.requests import StockBarsRequest
     from alpaca.data.timeframe import TimeFrame
+    from alpaca.data.enums import DataFeed
 
     from config.settings import settings
 
@@ -41,7 +42,7 @@ async def get_bars(
 
     try:
         tf = timeframe_map.get(timeframe, TimeFrame.Day)
-        req = StockBarsRequest(symbol_or_symbols=symbol.upper(), timeframe=tf, limit=limit)
+        req = StockBarsRequest(symbol_or_symbols=symbol.upper(), timeframe=tf, limit=limit, feed=DataFeed.IEX)
         bars = client.get_stock_bars(req)
         bar_list = bars[symbol.upper()] if symbol.upper() in bars else []
 
