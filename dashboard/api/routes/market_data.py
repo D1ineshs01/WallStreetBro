@@ -73,10 +73,11 @@ async def get_bars(
             "1Hour": ("730d", "1h"),
             "1Day": ("max", "1d"),
         }
+        safe_limit = min(limit, 100)  # Cap at 100 bars to prevent memory issues
         yf_period, yf_interval = period_map.get(timeframe, ("max", "1d"))
         ticker = yf.Ticker(symbol.upper())
         df = ticker.history(period=yf_period, interval=yf_interval)
-        df = df.tail(limit)
+        df = df.tail(safe_limit)
 
         return {
             "symbol": symbol.upper(),
