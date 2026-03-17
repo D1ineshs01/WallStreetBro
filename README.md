@@ -73,15 +73,40 @@ Scans X + web every    →    LangGraph Supervisor routes  →   Paper / Live
 
 ---
 
-## Cost to Run (Scenario 3 — Conservative)
+## Cost to Run
 
-| Component | Cost/day |
+### API Costs (Scenario 3 — Conservative)
+
+| Component | Cost/day | Cost/month |
+|---|---|---|
+| xAI Grok (26 scans, 182 tool calls) | ~$0.91 | ~$27.30 |
+| Anthropic Claude (supervisor + execution) | ~$0.46 | ~$13.80 |
+| Alpaca paper trading | Free | Free |
+| **API Total** | **~$1.37/day** | **~$41/month** |
+
+### Railway Infrastructure Costs
+
+Railway charges per resource consumed, not per service count.
+
+| Resource | Rate | Typical monthly cost |
+|---|---|---|
+| Memory | $0.000231 / GB / min | ~$2.17 |
+| CPU | $0.000463 / vCPU / min | ~$0.18 |
+| Network egress | $0.05 / GB | ~$0.11 |
+| Volume storage | $0.000035 / GB / min | ~$0.06 |
+| **Infrastructure Total** | | **~$2.52/month** |
+
+Railway provides **$5 free credit per month** — infrastructure is effectively free on the hobby plan.
+
+### Total Cost Summary
+
+| Tier | Monthly cost |
 |---|---|
-| xAI Grok (26 scans, 182 tool calls) | ~$0.91 |
-| Anthropic Claude (Haiku supervisor + Sonnet execution) | ~$0.46 |
+| API costs (xAI + Anthropic) | ~$41 |
+| Railway infrastructure | ~$0 (covered by free credit) |
+| Streamlit Cloud dashboard | Free |
 | Alpaca paper trading | Free |
-| Redis + PostgreSQL (local Docker) | Free |
-| **Total** | **~$1.37/day (~$41/month)** |
+| **Grand Total** | **~$41/month** |
 
 ---
 
@@ -89,22 +114,52 @@ Scans X + web every    →    LangGraph Supervisor routes  →   Paper / Live
 
 ### Cloud (Railway + Streamlit Cloud) — Recommended
 
-The production setup runs entirely in the cloud with no local machine required.
+The full system runs 24/7 in the cloud. Your laptop can be off. No local machine required after setup.
 
-**Backend (Railway):**
-1. Fork this repo to your GitHub
-2. Create a new Railway project → deploy from GitHub
-3. Add Redis and PostgreSQL plugins
-4. Set environment variables (see below)
-5. Railway auto-deploys on every `git push`
+**Step 1 — Deploy backend to Railway**
 
-**Dashboard (Streamlit Cloud):**
-1. Go to `share.streamlit.io` → connect your GitHub repo
-2. Set main file: `dashboard/frontend/app.py`
-3. Add `API_BASE_URL=https://your-railway-url.up.railway.app` in Streamlit secrets
+1. Sign up at [railway.app](https://railway.app)
+2. New Project → Deploy from GitHub repo → select this repo
+3. Add two database services: **Add Plugin → Redis** and **Add Plugin → PostgreSQL**
+4. In your main service → Variables, add all environment variables listed below
+5. Set `AUTO_ENABLE_TRADING=true` to allow the agent to trade on startup
+6. Railway auto-deploys on every `git push` to main
 
-**Enable trading:**
-Set `AUTO_ENABLE_TRADING=true` in Railway environment variables.
+**Step 2 — Deploy dashboard to Streamlit Cloud**
+
+1. Sign up at [share.streamlit.io](https://share.streamlit.io)
+2. New app → connect GitHub → select this repo
+3. Main file path: `dashboard/frontend/app.py`
+4. In Advanced Settings → Secrets, add:
+   ```toml
+   API_BASE_URL = "https://your-railway-app.up.railway.app"
+   ```
+5. Deploy — dashboard is live at a public URL, always on, free
+
+**Step 3 — Set up email alerts**
+
+1. Enable 2FA on your Google account at `myaccount.google.com`
+2. Go to `myaccount.google.com/apppasswords` → generate a password for "Wall Street Bro"
+3. Add to Railway Variables:
+   ```
+   GMAIL_SENDER=your_gmail@gmail.com
+   GMAIL_APP_PASSWORD=xxxx xxxx xxxx xxxx
+   ALERT_EMAIL=your_gmail@gmail.com
+   ```
+
+**Step 4 — Verify everything is running**
+
+- Railway → your service → Logs: should show `agent_loop_running` and `kill_switch_monitor_started`
+- Open your Streamlit Cloud URL: dashboard should show $100,000 paper portfolio value
+- Check Railway billing: should stay within the free $5/month credit
+
+**Updating the system:**
+```bash
+git add .
+git commit -m "your change"
+git push
+# Railway auto-redeploys within ~2 minutes
+```
 
 ---
 
