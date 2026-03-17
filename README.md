@@ -56,7 +56,8 @@ Scans X + web every    →    LangGraph Supervisor routes  →   Paper / Live
 | Dashboard | Streamlit + Plotly |
 | Message Bus | Redis Pub/Sub |
 | Database | PostgreSQL + SQLAlchemy async |
-| Infrastructure | Docker Compose |
+| Infrastructure | Railway (cloud) + Docker Compose (local) |
+| Notifications | Gmail SMTP email alerts on trade execution |
 | Language | Python 3.11 |
 
 ---
@@ -68,6 +69,7 @@ Scans X + web every    →    LangGraph Supervisor routes  →   Paper / Live
 3. **Claude Execution Agent** calculates risk, formats a JSON-schema-validated order, and sends it to Alpaca via MCP
 4. **Kill Switch Monitor** runs every 5 seconds — halts all trading if drawdown breaches 5%, rate limits are hit, or a CRITICAL macro shock is detected
 5. **Dashboard** shows live P&L, candlestick charts with trade overlays, Grok intelligence feed, and execution log
+6. **Email alert** fires instantly to your inbox every time an order is placed
 
 ---
 
@@ -83,16 +85,30 @@ Scans X + web every    →    LangGraph Supervisor routes  →   Paper / Live
 
 ---
 
-## Setup
+## Deployment
 
-### Prerequisites
-- Python 3.11
-- Docker Desktop
-- xAI API key (`console.x.ai`)
-- Anthropic API key (`console.anthropic.com`)
-- Alpaca paper trading account (`alpaca.markets`)
+### Cloud (Railway + Streamlit Cloud) — Recommended
 
-### Installation
+The production setup runs entirely in the cloud with no local machine required.
+
+**Backend (Railway):**
+1. Fork this repo to your GitHub
+2. Create a new Railway project → deploy from GitHub
+3. Add Redis and PostgreSQL plugins
+4. Set environment variables (see below)
+5. Railway auto-deploys on every `git push`
+
+**Dashboard (Streamlit Cloud):**
+1. Go to `share.streamlit.io` → connect your GitHub repo
+2. Set main file: `dashboard/frontend/app.py`
+3. Add `API_BASE_URL=https://your-railway-url.up.railway.app` in Streamlit secrets
+
+**Enable trading:**
+Set `AUTO_ENABLE_TRADING=true` in Railway environment variables.
+
+---
+
+### Local Development
 
 ```bash
 # 1. Clone the repo
@@ -115,7 +131,7 @@ python main.py --mode all
 # 6. Run the dashboard (separate terminal)
 streamlit run dashboard/frontend/app.py
 
-# 7. Enable trading (separate terminal, run once)
+# 7. Enable trading (run once)
 docker exec -it wsb_redis redis-cli SET agent:execution_status 1
 ```
 
@@ -145,6 +161,14 @@ ALPACA_BASE_URL=https://paper-api.alpaca.markets
 # Risk limits
 MAX_DRAWDOWN_PCT=0.05
 MAX_POSITION_SIZE_USD=10000
+
+# Railway / cloud
+AUTO_ENABLE_TRADING=true
+
+# Email alerts (Gmail App Password)
+GMAIL_SENDER=your_gmail@gmail.com
+GMAIL_APP_PASSWORD=xxxx_xxxx_xxxx_xxxx
+ALERT_EMAIL=your_gmail@gmail.com
 ```
 
 ---
@@ -184,7 +208,8 @@ WallStreetBro/
 ├── dashboard/frontend/          # Streamlit UI + Plotly charts
 ├── kill_switch/monitor.py       # Background safety monitor
 ├── logging_sinks/postgres_sink.py # SQLAlchemy async models
-└── docker-compose.yml           # Redis + PostgreSQL
+├── notifications/email_alerts.py  # Gmail SMTP trade alert emails
+└── docker-compose.yml           # Redis + PostgreSQL (local dev)
 ```
 
 ---
