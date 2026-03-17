@@ -7,7 +7,8 @@ import pandas as pd
 import streamlit as st
 from streamlit_autorefresh import st_autorefresh
 
-API_BASE = "http://localhost:8000/api/v1"
+import os
+API_BASE = os.environ.get("API_BASE_URL", "http://localhost:8000") + "/api/v1"
 
 st.set_page_config(page_title="Execution Log", page_icon="📋", layout="wide")
 st_autorefresh(interval=30_000, key="exec_log_refresh")

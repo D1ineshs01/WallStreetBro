@@ -8,7 +8,8 @@ import pandas as pd
 import plotly.graph_objs as go
 import streamlit as st
 
-API_BASE = "http://localhost:8000/api/v1"
+import os
+API_BASE = os.environ.get("API_BASE_URL", "http://localhost:8000") + "/api/v1"
 
 
 def render(symbol: str, timeframe: str = "1Day", limit: int = 100) -> None:

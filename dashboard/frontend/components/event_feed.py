@@ -6,7 +6,8 @@ Shows real-time market events published by the Grok scanner.
 import requests
 import streamlit as st
 
-API_BASE = "http://localhost:8000/api/v1"
+import os
+API_BASE = os.environ.get("API_BASE_URL", "http://localhost:8000") + "/api/v1"
 
 SEVERITY_COLORS = {
     "critical": "🔴",

@@ -8,7 +8,8 @@ import plotly.express as px
 import streamlit as st
 from streamlit_autorefresh import st_autorefresh
 
-API_BASE = "http://localhost:8000/api/v1"
+import os
+API_BASE = os.environ.get("API_BASE_URL", "http://localhost:8000") + "/api/v1"
 
 st.set_page_config(page_title="Portfolio", page_icon="💼", layout="wide")
 st_autorefresh(interval=15_000, key="portfolio_refresh")
