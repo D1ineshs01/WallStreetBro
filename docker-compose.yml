@@ -1,0 +1,111 @@
+version: "3.9"
+
+services:
+
+  # ── Redis (message broker + state cache) ──────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: wsb_redis
+    command: >
+      redis-server
+      --appendonly yes
+      --requirepass "${REDIS_PASSWORD:-}"
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - wsb_net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── PostgreSQL (state persistence + audit trail) ─────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: wsb_postgres
+    environment:
+      POSTGRES_USER: wallstreetbro
+      POSTGRES_PASSWORD: wallstreetbro
+      POSTGRES_DB: wallstreetbro
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - wsb_net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U wallstreetbro -d wallstreetbro"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── FastAPI Backend (data routing + SSE + WebSocket) ─────────────────
+  fastapi:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: wsb_fastapi
+    command: python main.py --mode api
+    env_file: .env
+    ports:
+      - "8000:8000"
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    networks:
+      - wsb_net
+    restart: unless-stopped
+    volumes:
+      - .:/app
+
+  # ── Agent Loop (LangGraph orchestration) ─────────────────────────────
+  agent:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: wsb_agent
+    command: python main.py --mode agent
+    env_file: .env
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    networks:
+      - wsb_net
+    restart: unless-stopped
+    volumes:
+      - .:/app
+
+  # ── Streamlit Dashboard (frontend, runs separately) ───────────────────
+  streamlit:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: wsb_streamlit
+    command: streamlit run dashboard/frontend/app.py --server.port 8501 --server.address 0.0.0.0
+    env_file: .env
+    ports:
+      - "8501:8501"
+    depends_on:
+      - fastapi
+    networks:
+      - wsb_net
+    restart: unless-stopped
+    volumes:
+      - .:/app
+
+networks:
+  wsb_net:
+    driver: bridge
+
+volumes:
+  redis_data:
+  postgres_data:
