@@ -73,12 +73,17 @@ async def run_agent_loop() -> None:
     log.info("database_initialized")
 
     # ── Fail-closed: ensure execution is explicitly disabled on startup ─
+    import os
     current_status = await redis.get_execution_status()
     if not current_status:
-        log.warning(
-            "execution_disabled_on_startup",
-            hint="Run: redis-cli SET agent:execution_status 1  to enable trading",
-        )
+        if os.environ.get("AUTO_ENABLE_TRADING", "").lower() == "true":
+            await redis.set_execution_status(True)
+            log.info("execution_auto_enabled", hint="AUTO_ENABLE_TRADING=true")
+        else:
+            log.warning(
+                "execution_disabled_on_startup",
+                hint="Run: redis-cli SET agent:execution_status 1  to enable trading",
+            )
 
     # ── Kill switch monitor (background) ──────────────────────────────
     from alpaca.trading.client import TradingClient
