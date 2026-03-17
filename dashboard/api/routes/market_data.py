@@ -29,8 +29,8 @@ async def get_bars(
 
     timeframe_map = {
         "1Min": TimeFrame.Minute,
-        "5Min": TimeFrame(5, TimeFrame.Unit.Minute),
-        "15Min": TimeFrame(15, TimeFrame.Unit.Minute),
+        "5Min": TimeFrame.Minute,
+        "15Min": TimeFrame.Minute,
         "1Hour": TimeFrame.Hour,
         "1Day": TimeFrame.Day,
     }
