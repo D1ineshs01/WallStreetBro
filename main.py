@@ -135,17 +135,19 @@ async def run_agent_loop() -> None:
 # ── FastAPI Server ─────────────────────────────────────────────────────
 async def run_api() -> None:
     """Run the FastAPI backend server."""
+    import os
     from dashboard.api.app import app
 
+    port = int(os.environ.get("PORT", 8000))
     config = uvicorn.Config(
         app,
         host="0.0.0.0",
-        port=8000,
+        port=port,
         log_level="info",
         access_log=True,
     )
     server = uvicorn.Server(config)
-    log.info("fastapi_starting", host="0.0.0.0", port=8000)
+    log.info("fastapi_starting", host="0.0.0.0", port=port)
     await server.serve()
 
 
