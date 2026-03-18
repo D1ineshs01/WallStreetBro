@@ -59,7 +59,7 @@ def render() -> None:
 
         with st.expander(
             f"{sev_icon} {icon} {category.replace('_', ' ').title()} — {', '.join(symbols[:3]) or 'N/A'}",
-            expanded=(severity in ("critical", "high")),
+            expanded=False,
         ):
             col_a, col_b = st.columns([3, 1])
             with col_a:
