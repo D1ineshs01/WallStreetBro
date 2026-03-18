@@ -29,21 +29,35 @@ async def lifespan(app: FastAPI):
     # ── Startup ────────────────────────────────────────────────────────
     log.info("fastapi_startup")
 
-    from core.redis_client import get_redis
-    app.state.redis = await get_redis()
+    # Redis — optional: endpoints that need it will handle None gracefully
+    try:
+        from core.redis_client import get_redis
+        app.state.redis = await get_redis()
+        log.info("redis_connected")
+    except Exception as exc:
+        log.warning("redis_unavailable_dashboard_readonly", error=str(exc))
+        app.state.redis = None
 
-    from config.settings import settings
-    from logging_sinks.postgres_sink import PostgresSink
-    app.state.db = PostgresSink(settings.database_url)
-    await app.state.db.init_db()
+    # PostgreSQL — optional: endpoints that need it will handle None gracefully
+    try:
+        from config.settings import settings
+        from logging_sinks.postgres_sink import PostgresSink
+        app.state.db = PostgresSink(settings.database_url)
+        await app.state.db.init_db()
+        log.info("postgres_connected")
+    except Exception as exc:
+        log.warning("postgres_unavailable_dashboard_readonly", error=str(exc))
+        app.state.db = None
 
     log.info("fastapi_ready", host="0.0.0.0", port=8000)
     yield
 
     # ── Shutdown ───────────────────────────────────────────────────────
     log.info("fastapi_shutdown")
-    await app.state.redis.disconnect()
-    await app.state.db.close()
+    if app.state.redis:
+        await app.state.redis.disconnect()
+    if app.state.db:
+        await app.state.db.close()
 
 
 def create_app() -> FastAPI:
