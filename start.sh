@@ -5,7 +5,7 @@
 # Streamlit: $PORT (Railway's public port, foreground)
 
 export FASTAPI_PORT=8000
-export API_BASE_URL="http://localhost:8000"
+export API_BASE_URL="http://127.0.0.1:8000"
 
 # Start FastAPI first — log output so Railway captures any crash reason
 echo "[start.sh] Starting FastAPI on port 8000..."
