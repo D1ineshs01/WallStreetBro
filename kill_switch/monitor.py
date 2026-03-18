@@ -76,8 +76,10 @@ class KillSwitchMonitor:
         checks = [
             ("drawdown", self._check_drawdown),
             ("rate_limit", self._check_rate_limits),
-            ("macro_disruption", self._check_macro_disruption),
             ("manual_kill", self._check_manual_kill),
+            # NOTE: macro_disruption check intentionally removed.
+            # Critical/volatile market events are now routed to the execution
+            # agent for risk/reward analysis. We trade through volatility.
         ]
 
         for name, check_fn in checks:

@@ -38,7 +38,6 @@ async def ingestion_node(state: AgentState) -> dict:
     """
     from core.redis_client import get_redis
     from ingestion.grok_agent import GrokIngestionAgent
-    from kill_switch.monitor import KillSwitchMonitor
 
     redis = await get_redis()
     agent = GrokIngestionAgent(redis)
@@ -51,12 +50,6 @@ async def ingestion_node(state: AgentState) -> dict:
 
     try:
         new_events = await agent.run_full_scan(symbols=symbols)
-
-        # Check for CRITICAL events — flag for kill switch monitor
-        for event in new_events:
-            if hasattr(event, 'disruption_severity') and event.disruption_severity == "critical":
-                await KillSwitchMonitor.mark_critical_event(redis)
-                log.warning("critical_event_detected_in_ingestion", event_id=event.event_id)
 
         # Convert Pydantic models to TypedDict-compatible dicts
         event_dicts: List[MarketEvent] = [e.model_dump() for e in new_events]
@@ -221,33 +214,46 @@ def route_from_supervisor(state: AgentState) -> str:
 
 def _generate_signals_from_events(events) -> List[TradeSignal]:
     """
-    Convert high-confidence market events into preliminary trade signals.
-    The execution agent performs the final reasoning — this is a first pass.
+    Convert market events into trade signals for Claude to evaluate.
+
+    Every event is treated as a potential opportunity — volatile and critical
+    events often produce the biggest price moves and best risk/reward setups.
+    Claude (the execution agent) performs the full risk/reward analysis and
+    decides whether to trade, which direction, and what size.
+
+    Direction is set to "buy" as a starting suggestion. Claude will override
+    if a sell or volatility play is more appropriate given the event context.
     """
     signals = []
     for event in events:
         confidence = getattr(event, 'confidence', 0)
         symbols = getattr(event, 'symbols_affected', [])
         severity = getattr(event, 'disruption_severity', 'low')
+        category = getattr(event, 'category', '')
+        summary = getattr(event, 'summary', '')
+        invalidation = getattr(event, 'invalidation_conditions', '')
 
-        if confidence < 0.7 or not symbols:
-            continue
-        if severity not in ("high", "critical"):
+        # Include all events with any meaningful confidence
+        if confidence < 0.4 or not symbols:
             continue
 
-        for symbol in symbols[:2]:  # Max 2 symbols per event
-            direction = "sell" if severity == "critical" else "buy"
+        for symbol in symbols[:3]:  # Up to 3 symbols per event
             signals.append(
                 TradeSignal(
                     signal_id=str(uuid.uuid4()),
                     symbol=symbol.upper(),
-                    direction=direction,
+                    direction="buy",  # Execution agent will override based on R:R analysis
                     rationale=(
-                        f"{event.category} event detected with {confidence:.0%} confidence. "
-                        f"Severity: {severity}. Summary: {getattr(event, 'summary', '')[:300]}"
+                        f"[{severity.upper()}] {category} event — confidence {confidence:.0%}.\n"
+                        f"Summary: {summary[:400]}\n"
+                        f"Invalidation: {invalidation[:200]}\n"
+                        f"Instruction: Perform a full risk-to-reward analysis. "
+                        f"Volatile events create opportunity. Consider both the affected "
+                        f"symbol and related volatility plays (VIX, inverse ETFs, safe-haven "
+                        f"assets). Execute if R:R >= 2:1."
                     ),
                     confidence=confidence,
-                    suggested_qty=10,  # Conservative default; execution agent refines
+                    suggested_qty=10,  # Execution agent refines based on account size
                     suggested_limit_price=None,
                     generated_by="ingestion_node",
                     timestamp=datetime.now(timezone.utc).isoformat(),
