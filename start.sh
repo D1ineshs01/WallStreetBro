@@ -4,7 +4,7 @@
 # Streamlit: $PORT      (Railway's public port — what users see)
 
 export FASTAPI_PORT=8000
-export API_BASE_URL="http://localhost:8000"
+export API_BASE_URL="http://127.0.0.1:8000"
 
 # Start FastAPI in background
 echo "[start] FastAPI starting on port 8000..."
