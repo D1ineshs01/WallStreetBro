@@ -79,6 +79,58 @@ async def get_executions(limit: int = 100):
         await sink.close()
 
 
+@router.get("/orders")
+async def get_orders():
+    """Return all open orders from Alpaca."""
+    from alpaca.trading.client import TradingClient
+    from alpaca.trading.requests import GetOrdersRequest
+    from alpaca.trading.enums import QueryOrderStatus
+
+    client = TradingClient(
+        api_key=settings.alpaca_api_key,
+        secret_key=settings.alpaca_secret_key,
+        paper=settings.is_paper_trading,
+    )
+    try:
+        orders = client.get_orders(GetOrdersRequest(status=QueryOrderStatus.OPEN))
+        return {
+            "orders": [
+                {
+                    "order_id": str(o.id),
+                    "symbol": o.symbol,
+                    "qty": str(o.qty),
+                    "filled_qty": str(o.filled_qty) if o.filled_qty else "0",
+                    "side": str(o.side).replace("OrderSide.", ""),
+                    "order_type": str(o.order_type).replace("OrderType.", ""),
+                    "status": str(o.status).replace("OrderStatus.", ""),
+                    "limit_price": str(o.limit_price) if o.limit_price else None,
+                    "stop_price": str(o.stop_price) if o.stop_price else None,
+                    "time_in_force": str(o.time_in_force).replace("TimeInForce.", ""),
+                    "created_at": str(o.created_at),
+                    "updated_at": str(o.updated_at) if o.updated_at else None,
+                }
+                for o in orders
+            ]
+        }
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@router.get("/orders/history")
+async def get_order_history(limit: int = 50):
+    """Return recent filled/cancelled orders from the DB."""
+    from logging_sinks.postgres_sink import PostgresSink
+
+    sink = PostgresSink(settings.database_url)
+    try:
+        executions = await sink.get_recent_executions(limit=limit)
+        return {"orders": executions}
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+    finally:
+        await sink.close()
+
+
 @router.post("/kill-switch/{action}")
 async def set_kill_switch(action: str, request: Request):
     """
