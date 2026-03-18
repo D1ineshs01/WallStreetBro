@@ -23,7 +23,7 @@ from alpaca.trading.requests import (
 )
 from alpaca.data.historical import StockHistoricalDataClient
 from alpaca.data.requests import StockLatestQuoteRequest, StockBarsRequest
-from alpaca.data.timeframe import TimeFrame
+from alpaca.data.timeframe import TimeFrame, TimeFrameUnit
 
 from config.settings import settings
 from core.exceptions import AlpacaExecutionError, KillSwitchActivatedError
@@ -36,8 +36,8 @@ log = structlog.get_logger(__name__)
 # ── Timeframe mapping ──────────────────────────────────────────────────
 TIMEFRAME_MAP = {
     "1Min": TimeFrame.Minute,
-    "5Min": TimeFrame(5, TimeFrame.Unit.Minute),
-    "15Min": TimeFrame(15, TimeFrame.Unit.Minute),
+    "5Min": TimeFrame(5, TimeFrameUnit.Minute),
+    "15Min": TimeFrame(15, TimeFrameUnit.Minute),
     "1Hour": TimeFrame.Hour,
     "1Day": TimeFrame.Day,
 }
