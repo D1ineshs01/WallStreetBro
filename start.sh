@@ -1,40 +1,21 @@
 #!/bin/bash
-# Wall Street Bro — Railway startup script
-#
-# Architecture:
-#   FastAPI  → port 8000 (internal only, starts first)
-#   Streamlit → $PORT   (Railway's public port, starts after FastAPI is ready)
-#
-# Streamlit calls FastAPI via localhost:8000
-# Users access the Streamlit dashboard via the public Railway URL
-
-set -e
+# Wall Street Bro — Railway startup
+# FastAPI: port 8000 (internal, background)
+# Streamlit: $PORT (Railway's public port, foreground)
+# Both start immediately — Streamlit calls FastAPI via localhost:8000
 
 export FASTAPI_PORT=8000
 export API_BASE_URL="http://localhost:8000"
 
-echo "[start.sh] Starting FastAPI on port $FASTAPI_PORT..."
+# Start FastAPI in background
 python main.py --mode all &
-FASTAPI_PID=$!
 
-# Poll until FastAPI is ready (up to 30s) before starting Streamlit
-echo "[start.sh] Waiting for FastAPI to be ready..."
-for i in $(seq 1 30); do
-    if curl -sf "http://localhost:${FASTAPI_PORT}/health" > /dev/null 2>&1; then
-        echo "[start.sh] FastAPI ready after ${i}s."
-        break
-    fi
-    sleep 1
-done
-
-echo "[start.sh] Starting Streamlit on port ${PORT:-8501}..."
-streamlit run dashboard/frontend/Dashboard.py \
+# Start Streamlit in foreground on Railway's public port
+# Running in foreground keeps the container alive and lets Railway
+# detect the port as soon as Streamlit boots (~10 seconds)
+exec streamlit run dashboard/frontend/Dashboard.py \
     --server.port "${PORT:-8501}" \
     --server.address "0.0.0.0" \
     --server.headless true \
     --server.enableCORS false \
-    --server.enableXsrfProtection false &
-STREAMLIT_PID=$!
-
-# Exit if either process dies
-wait -n $FASTAPI_PID $STREAMLIT_PID
+    --server.enableXsrfProtection false
