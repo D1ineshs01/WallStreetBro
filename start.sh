@@ -1,14 +1,17 @@
 #!/bin/bash
 # Wall Street Bro — Railway startup
-# FastAPI: port 8000 (internal, background)
+# FastAPI: port 8000 (internal, background) — isolated so it survives agent crashes
+# Agent loop: background — can crash/restart without killing the dashboard
 # Streamlit: $PORT (Railway's public port, foreground)
-# Both start immediately — Streamlit calls FastAPI via localhost:8000
 
 export FASTAPI_PORT=8000
 export API_BASE_URL="http://localhost:8000"
 
-# Start FastAPI in background
-python main.py --mode all &
+# Start FastAPI independently — dashboard stays up even if agent has no credits
+python main.py --mode api &
+
+# Start agent loop separately — crashes here won't kill FastAPI or Streamlit
+python main.py --mode agent &
 
 # Start Streamlit in foreground on Railway's public port
 # Running in foreground keeps the container alive and lets Railway
