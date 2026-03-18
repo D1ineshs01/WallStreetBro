@@ -65,6 +65,17 @@ async def run_agent_loop() -> None:
 
     log.info("agent_loop_starting")
 
+    # ── Log active config so Railway logs show the exact model/key being used ─
+    key_preview = settings.xai_api_key[:8] + "..." if settings.xai_api_key else "NOT SET"
+    log.info(
+        "active_config",
+        grok_model=settings.grok_model,
+        xai_key_prefix=key_preview,
+        supervisor_model=settings.supervisor_model,
+        execution_model=settings.execution_model,
+        is_paper_trading=settings.is_paper_trading,
+    )
+
     # ── Infrastructure setup ───────────────────────────────────────────
     redis = await get_redis()
 

@@ -130,17 +130,16 @@ class GrokIngestionAgent:
         """
         await self._rate_limiter.acquire()
 
+        # Build X source config — only include handle lists if non-empty to avoid 422 errors
+        x_source: dict = {"type": "x"}
+        if settings.allowed_x_handles:
+            x_source["x_handles"] = settings.allowed_x_handles
+        if settings.excluded_x_handles:
+            x_source["excluded_x_handles"] = settings.excluded_x_handles
+
         search_params = {
             "mode": "auto",
-            "sources": search_sources
-            or [
-                {
-                    "type": "x",
-                    "x_handles": settings.allowed_x_handles or [],
-                    "excluded_x_handles": settings.excluded_x_handles or [],
-                },
-                {"type": "web"},
-            ],
+            "sources": search_sources or [x_source, {"type": "web"}],
         }
         if from_date:
             search_params["from_date"] = from_date
@@ -149,6 +148,8 @@ class GrokIngestionAgent:
 
         # enable_image_understanding is intentionally never set here.
         # Enabling it triggers xAI's view_image tool at $5/1k calls — not needed.
+
+        log.debug("grok_api_call", model=settings.grok_model, from_date=from_date, to_date=to_date)
 
         try:
             response = await self.client.chat.completions.create(
@@ -168,6 +169,22 @@ class GrokIngestionAgent:
             return response.choices[0].message.content or "[]"
 
         except Exception as exc:
+            # Log full error detail so we can diagnose auth vs model-not-found vs bad-format
+            status_code = getattr(exc, "status_code", None)
+            response_body = getattr(exc, "response", None)
+            body_text = ""
+            if response_body is not None:
+                try:
+                    body_text = response_body.text
+                except Exception:
+                    body_text = str(response_body)
+            log.error(
+                "grok_api_error",
+                model=settings.grok_model,
+                status_code=status_code,
+                error=str(exc),
+                body=body_text[:500],
+            )
             if "rate_limit" in str(exc).lower():
                 raise GrokRateLimitError(f"Grok rate limit hit: {exc}") from exc
             raise
