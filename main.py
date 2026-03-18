@@ -110,8 +110,9 @@ async def run_agent_loop() -> None:
         while True:
             log.info("agent_cycle_start")
             try:
-                async for node_name, node_state in graph.astream(state, config=config):
-                    node = list(node_name.keys())[0] if node_name else "unknown"
+                async for chunk in graph.astream(state, config=config):
+                    node = list(chunk.keys())[0] if chunk else "unknown"
+                    node_state = list(chunk.values())[0] if chunk else {}
                     log.debug("node_executed", node=node)
                     if isinstance(node_state, dict):
                         state.update(node_state)
