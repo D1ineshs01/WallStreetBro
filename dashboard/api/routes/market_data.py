@@ -79,6 +79,12 @@ async def get_bars(
         df = ticker.history(period=yf_period, interval=yf_interval)
         df = df.tail(safe_limit)
 
+        import math
+
+        def _safe(val):
+            f = float(val)
+            return None if (math.isnan(f) or math.isinf(f)) else f
+
         return {
             "symbol": symbol.upper(),
             "timeframe": timeframe,
@@ -86,13 +92,14 @@ async def get_bars(
             "bars": [
                 {
                     "timestamp": str(ts),
-                    "open": float(row["Open"]),
-                    "high": float(row["High"]),
-                    "low": float(row["Low"]),
-                    "close": float(row["Close"]),
-                    "volume": int(row["Volume"]),
+                    "open": _safe(row["Open"]),
+                    "high": _safe(row["High"]),
+                    "low": _safe(row["Low"]),
+                    "close": _safe(row["Close"]),
+                    "volume": int(row["Volume"]) if not math.isnan(float(row["Volume"])) else 0,
                 }
                 for ts, row in df.iterrows()
+                if _safe(row["Close"]) is not None
             ],
         }
     except Exception as exc:

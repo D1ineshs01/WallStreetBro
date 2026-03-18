@@ -107,28 +107,31 @@ async def run_agent_loop() -> None:
     log.info("agent_loop_running", mode="continuous")
 
     try:
-        # LangGraph runs until it reaches END node (or is cancelled)
-        # We wrap in a loop so it restarts after each complete cycle
         while True:
             log.info("agent_cycle_start")
-            async for node_name, node_state in graph.astream(state, config=config):
-                log.debug("node_executed", node=list(node_name.keys())[0] if node_name else "unknown")
-                # Merge the returned state chunk back
-                if isinstance(node_state, dict):
-                    state.update(node_state)
+            try:
+                async for node_name, node_state in graph.astream(state, config=config):
+                    node = list(node_name.keys())[0] if node_name else "unknown"
+                    log.debug("node_executed", node=node)
+                    if isinstance(node_state, dict):
+                        state.update(node_state)
 
-            log.info("agent_cycle_complete", iteration=state.get("iteration_count", 0))
-            # Reset for next cycle (keep history but reset pipeline)
-            state["market_events"] = state.get("market_events", [])[-50:]  # Keep last 50
-            state["trade_signals"] = []  # Clear processed signals
-            state["next_node"] = "ingestion"
-            state["error"] = None
+                log.info("agent_cycle_complete", iteration=state.get("iteration_count", 0))
+                state["market_events"] = state.get("market_events", [])[-50:]
+                state["trade_signals"] = []
+                state["next_node"] = "ingestion"
+                state["error"] = None
 
-            # ── Scenario 3: wait 15 minutes, skip outside market hours ──
+            except Exception as cycle_exc:
+                log.error("agent_cycle_error", error=str(cycle_exc), exc_info=True)
+                # Don't crash the loop — sleep and retry next cycle
+                state["error"] = str(cycle_exc)
+                state["next_node"] = "ingestion"
+
+            # ── Scenario 3: wait 15 minutes between cycles ──
             await asyncio.sleep(SCAN_INTERVAL_SECONDS)
             if not _is_market_hours():
                 log.info("outside_market_hours_skipping_cycle")
-                continue
 
     except asyncio.CancelledError:
         log.info("agent_loop_cancelled")
