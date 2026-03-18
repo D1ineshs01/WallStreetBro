@@ -8,7 +8,7 @@ import streamlit as st
 from streamlit_autorefresh import st_autorefresh
 
 import os
-API_BASE = os.environ.get("API_BASE_URL", "http://127.0.0.1:8000") + "/api/v1"
+API_BASE = os.environ.get("API_BASE_URL", "http://localhost:8000") + "/api/v1"
 
 st.set_page_config(page_title="Execution Log", page_icon="📋", layout="wide")
 st_autorefresh(interval=30_000, key="exec_log_refresh")

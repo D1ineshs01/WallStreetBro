@@ -9,7 +9,7 @@ import streamlit as st
 from streamlit_autorefresh import st_autorefresh
 
 import os
-API_BASE = os.environ.get("API_BASE_URL", "http://127.0.0.1:8000") + "/api/v1"
+API_BASE = os.environ.get("API_BASE_URL", "http://localhost:8000") + "/api/v1"
 
 st.set_page_config(page_title="Market Intelligence", page_icon="🌍", layout="wide")
 st_autorefresh(interval=60_000, key="intel_refresh")

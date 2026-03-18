@@ -19,7 +19,7 @@ from streamlit_autorefresh import st_autorefresh
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from components import candlestick, event_feed, kpi_metrics
 
-API_BASE = os.environ.get("API_BASE_URL", "http://127.0.0.1:8000") + "/api/v1"
+API_BASE = os.environ.get("API_BASE_URL", "http://localhost:8000") + "/api/v1"
 
 # ── Page config ────────────────────────────────────────────────────────
 st.set_page_config(

@@ -9,7 +9,7 @@ import plotly.graph_objs as go
 import streamlit as st
 
 import os
-API_BASE = os.environ.get("API_BASE_URL", "http://127.0.0.1:8000") + "/api/v1"
+API_BASE = os.environ.get("API_BASE_URL", "http://localhost:8000") + "/api/v1"
 
 
 def render(symbol: str, timeframe: str = "1Day", limit: int = 100) -> None:
