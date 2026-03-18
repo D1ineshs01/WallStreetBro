@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     # ── xAI / Grok ────────────────────────────────────────────────────
     xai_api_key: str = Field(..., description="xAI API key for Grok access")
     xai_base_url: str = Field("https://api.x.ai/v1", description="xAI API base URL")
-    grok_model: str = Field("grok-4.1-fast", description="Grok model ID")
+    grok_model: str = Field("grok-4-1-fast-non-reasoning", description="Grok model ID")
     grok_rate_limit_rpm: int = Field(607, description="Grok requests per minute limit")
     grok_rate_limit_tpm: int = Field(4_000_000, description="Grok tokens per minute limit")
 
