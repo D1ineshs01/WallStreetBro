@@ -33,13 +33,14 @@ def render() -> None:
 
     try:
         resp = requests.get(f"{API_BASE}/insights/recent", params={"limit": 50}, timeout=5)
+        resp.raise_for_status()
         events = resp.json().get("events", [])
-    except Exception:
-        st.warning("Cannot connect to intelligence feed.")
+    except Exception as exc:
+        st.warning(f"Intelligence feed unavailable: {exc}")
         return
 
     if not events:
-        st.info("No market events detected yet. Scanner is running...")
+        st.info("No events in database yet — events populate when the agent scans during market hours (9:15 AM – 4:00 PM ET, Mon–Fri).")
         return
 
     # Sort by severity (critical first) and keep worst 4
