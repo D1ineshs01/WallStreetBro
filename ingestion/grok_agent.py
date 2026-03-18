@@ -139,16 +139,28 @@ class GrokIngestionAgent:
         """
         await self._rate_limiter.acquire()
 
+        # x_search tool — parameters go inside the tool object per xAI Agent Tools API docs
+        x_search_tool: dict = {"type": "x_search"}
+        if from_date:
+            x_search_tool["from_date"] = from_date
+        if to_date:
+            x_search_tool["to_date"] = to_date
+        if settings.allowed_x_handles:
+            x_search_tool["allowed_x_handles"] = settings.allowed_x_handles[:10]
+        if settings.excluded_x_handles:
+            x_search_tool["excluded_x_handles"] = settings.excluded_x_handles[:10]
+        # enable_image_understanding intentionally omitted — triggers $5/1k view_image charges
+
+        # web_search doesn't take additional parameters
+        web_search_tool: dict = {"type": "web_search"}
+
         body: dict = {
             "model": settings.grok_model,
             "input": [
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": user_message},
             ],
-            "tools": [
-                {"type": "web_search"},
-                {"type": "x_search"},
-            ],
+            "tools": [x_search_tool, web_search_tool],
         }
 
         log.debug("grok_api_call", model=settings.grok_model, from_date=from_date, to_date=to_date)
