@@ -118,7 +118,7 @@ async def execution_node(state: AgentState) -> dict:
     agent = ExecutionAgent(mcp_server, redis)
 
     new_executions: List[TradeExecution] = []
-    for signal in pending[:3]:  # Process max 3 signals per cycle
+    for signal in pending[:1]:  # Process 1 signal per cycle to control API costs
         execution = await agent.execute_signal(signal, state)
         if execution:
             new_executions.append(execution)

@@ -20,7 +20,7 @@ class Settings(BaseSettings):
     # ── Anthropic / Claude ────────────────────────────────────────────
     anthropic_api_key: str = Field(..., description="Anthropic API key")
     supervisor_model: str = Field("claude-sonnet-4-5", description="Supervisor node model")
-    execution_model: str = Field("claude-opus-4-6", description="Execution agent model")
+    execution_model: str = Field("claude-sonnet-4-6", description="Execution agent model")
     visualization_model: str = Field("claude-sonnet-4-5", description="Visualization node model")
 
     # ── Redis ─────────────────────────────────────────────────────────
