@@ -96,10 +96,10 @@ async def execution_node(state: AgentState) -> dict:
 
     redis = await get_redis()
 
-    # Hard kill switch check
-    if state.get("kill_switch_active") or not state.get("execution_enabled"):
-        log.warning("execution_node_blocked_by_kill_switch")
-        return {"error": "Execution blocked: kill switch active or not enabled"}
+    # Hard kill switch check — Redis is the authoritative source
+    if state.get("kill_switch_active"):
+        log.warning("execution_node_blocked_kill_switch_active")
+        return {"error": "Execution blocked: kill switch active"}
 
     enabled = await redis.get_execution_status()
     if not enabled:
