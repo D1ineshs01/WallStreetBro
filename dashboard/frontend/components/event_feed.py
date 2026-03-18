@@ -24,12 +24,15 @@ CATEGORY_ICONS = {
 }
 
 
+SEVERITY_RANK = {"critical": 0, "high": 1, "medium": 2, "low": 3}
+
+
 def render() -> None:
-    """Render the Grok event feed panel."""
-    st.subheader("Market Intelligence Feed")
+    """Render the top-4 worst Grok events on the main dashboard."""
+    st.subheader("Top Threats")
 
     try:
-        resp = requests.get(f"{API_BASE}/insights/recent", params={"limit": 20}, timeout=5)
+        resp = requests.get(f"{API_BASE}/insights/recent", params={"limit": 50}, timeout=5)
         events = resp.json().get("events", [])
     except Exception:
         st.warning("Cannot connect to intelligence feed.")
@@ -38,6 +41,10 @@ def render() -> None:
     if not events:
         st.info("No market events detected yet. Scanner is running...")
         return
+
+    # Sort by severity (critical first) and keep worst 4
+    events = sorted(events, key=lambda e: SEVERITY_RANK.get(e.get("disruption_severity", "low"), 3))
+    events = events[:4]
 
     for event in events:
         category = event.get("category", "unknown")

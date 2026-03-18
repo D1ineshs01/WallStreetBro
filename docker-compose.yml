@@ -90,7 +90,7 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: wsb_streamlit
-    command: streamlit run dashboard/frontend/app.py --server.port 8501 --server.address 0.0.0.0
+    command: streamlit run dashboard/frontend/Dashboard.py --server.port 8501 --server.address 0.0.0.0
     env_file: .env
     ports:
       - "8501:8501"
