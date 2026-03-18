@@ -1,16 +1,15 @@
 """
 Grok Intelligence Ingestion Agent.
 
-Uses xAI's Grok API (OpenAI-compatible) with x_search and web_search
-server-side tools to continuously scan X (Twitter) and the web for:
+Uses xAI's Agent Tools API (/v1/responses) with web_search and x_search
+tools to continuously scan X (Twitter) and the web for:
   - Supply chain disruptions
   - Geopolitical events
   - Macroeconomic data releases
   - Retail sentiment shifts
 
-Prompt caching strategy:
-  - SYSTEM_PROMPT is static across all calls → cached at $0.05/1M tokens
-  - from_date, to_date, symbol lists go in the user message → not cached
+NOTE: The old search_parameters / extra_body approach was deprecated by xAI
+(410 Gone). This implementation uses the current Agent Tools API.
 """
 
 import asyncio
@@ -19,8 +18,8 @@ import time
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 
+import httpx
 import structlog
-from openai import AsyncOpenAI
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 from config.settings import settings
@@ -101,14 +100,24 @@ class GrokIngestionAgent:
 
     def __init__(self, redis_client: RedisClient):
         self.redis = redis_client
-        self.client = AsyncOpenAI(
-            api_key=settings.xai_api_key,
+        # Use httpx directly — xAI Agent Tools API is at /v1/responses,
+        # not the OpenAI-compatible /v1/chat/completions endpoint.
+        self._http = httpx.AsyncClient(
             base_url=settings.xai_base_url,
+            headers={
+                "Authorization": f"Bearer {settings.xai_api_key}",
+                "Content-Type": "application/json",
+            },
+            timeout=120.0,
         )
         self._rate_limiter = TokenBucketRateLimiter(
             rate_per_minute=settings.grok_rate_limit_rpm,
             buffer_pct=settings.rate_limit_buffer_pct,
         )
+
+    async def aclose(self) -> None:
+        """Close the underlying HTTP client."""
+        await self._http.aclose()
 
     def _rolling_window(self, minutes: int = 15) -> tuple[str, str]:
         """Return ISO 8601 from_date and to_date for the last N minutes."""
@@ -120,73 +129,75 @@ class GrokIngestionAgent:
     async def _call_grok(
         self,
         user_message: str,
-        search_sources: Optional[list] = None,
-        from_date: Optional[str] = None,
-        to_date: Optional[str] = None,
+        search_sources: Optional[list] = None,  # kept for API compat, ignored
+        from_date: Optional[str] = None,         # kept for API compat, date is in prompt
+        to_date: Optional[str] = None,           # kept for API compat, date is in prompt
     ) -> str:
         """
-        Raw Grok API call with retry logic and rate limiting.
-        The static SYSTEM_PROMPT is kept separate to maximize cache hits.
+        Call xAI Agent Tools API (/v1/responses) with web_search + x_search tools.
+        The old search_parameters / extra_body approach returned 410 Gone.
         """
         await self._rate_limiter.acquire()
 
-        # Build X source config — only include handle lists if non-empty to avoid 422 errors
-        x_source: dict = {"type": "x"}
-        if settings.allowed_x_handles:
-            x_source["x_handles"] = settings.allowed_x_handles
-        if settings.excluded_x_handles:
-            x_source["excluded_x_handles"] = settings.excluded_x_handles
-
-        search_params = {
-            "mode": "auto",
-            "sources": search_sources or [x_source, {"type": "web"}],
+        body: dict = {
+            "model": settings.grok_model,
+            "input": [
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": user_message},
+            ],
+            "tools": [
+                {"type": "web_search"},
+                {"type": "x_search"},
+            ],
         }
-        if from_date:
-            search_params["from_date"] = from_date
-        if to_date:
-            search_params["to_date"] = to_date
-
-        # enable_image_understanding is intentionally never set here.
-        # Enabling it triggers xAI's view_image tool at $5/1k calls — not needed.
 
         log.debug("grok_api_call", model=settings.grok_model, from_date=from_date, to_date=to_date)
 
         try:
-            response = await self.client.chat.completions.create(
-                model=settings.grok_model,
-                messages=[
-                    {"role": "system", "content": SYSTEM_PROMPT},
-                    {"role": "user", "content": user_message},
-                ],
-                extra_body={"search_parameters": search_params},
-                temperature=0.1,  # Low temperature for consistent structured output
+            resp = await self._http.post("/responses", json=body)
+            resp.raise_for_status()
+            data = resp.json()
+
+            # Track usage metrics
+            usage = data.get("usage") or {}
+            total_tokens = (
+                usage.get("total_tokens")
+                or (usage.get("input_tokens", 0) + usage.get("output_tokens", 0))
             )
-            # Track metrics
-            if response.usage:
+            if total_tokens:
                 await self.redis.increment_grok_requests(1)
-                await self.redis.increment_grok_tokens(response.usage.total_tokens)
+                await self.redis.increment_grok_tokens(total_tokens)
 
-            return response.choices[0].message.content or "[]"
+            # Extract text from Agent Tools response format:
+            # { "output": [{ "type": "message", "content": [{ "type": "output_text", "text": "..." }] }] }
+            for item in data.get("output", []):
+                if item.get("type") == "message":
+                    for content_block in item.get("content", []):
+                        if content_block.get("type") == "output_text":
+                            return content_block.get("text", "[]")
 
-        except Exception as exc:
-            # Log full error detail so we can diagnose auth vs model-not-found vs bad-format
-            status_code = getattr(exc, "status_code", None)
-            response_body = getattr(exc, "response", None)
-            body_text = ""
-            if response_body is not None:
-                try:
-                    body_text = response_body.text
-                except Exception:
-                    body_text = str(response_body)
+            # Fallback: some models may return OpenAI-style choices
+            choices = data.get("choices", [])
+            if choices:
+                return choices[0].get("message", {}).get("content", "[]")
+
+            log.warning("grok_response_no_text", raw=str(data)[:300])
+            return "[]"
+
+        except httpx.HTTPStatusError as exc:
+            status_code = exc.response.status_code
+            body_text = exc.response.text[:500]
             log.error(
                 "grok_api_error",
                 model=settings.grok_model,
                 status_code=status_code,
-                error=str(exc),
-                body=body_text[:500],
+                body=body_text,
             )
-            if "rate_limit" in str(exc).lower():
-                raise GrokRateLimitError(f"Grok rate limit hit: {exc}") from exc
+            if "rate_limit" in body_text.lower() or status_code == 429:
+                raise GrokRateLimitError(f"Grok rate limit: {exc}") from exc
+            raise
+        except Exception as exc:
+            log.error("grok_api_error", model=settings.grok_model, error=str(exc))
             raise
 
     def _parse_response(self, raw: str) -> List[dict]:
