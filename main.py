@@ -18,20 +18,45 @@ import structlog
 import uvicorn
 
 # ── Scenario 3: 15-minute scan interval, market hours only ────────────
-SCAN_INTERVAL_SECONDS = 900          # 15 minutes
-MARKET_OPEN  = dt_time(9, 30)        # 9:30 AM ET
+SCAN_INTERVAL_SECONDS = 900          # 15 minutes between scans
+MARKET_OPEN  = dt_time(9, 15)        # Start 15 min before market open (9:30 ET)
 MARKET_CLOSE = dt_time(16, 0)        # 4:00 PM ET
 
 
-def _is_market_hours() -> bool:
-    """Return True if current UTC time falls within US market hours (Mon–Fri)."""
-    # Convert UTC to approximate ET (UTC-4 during EDT, UTC-5 during EST)
-    # Using UTC-4 (EDT) as a conservative approximation
+def _et_now():
+    """Current time in US Eastern (approximated as UTC-4 for EDT)."""
     from datetime import timedelta
-    et_now = datetime.now(timezone.utc) - timedelta(hours=4)
-    if et_now.weekday() >= 5:          # Saturday=5, Sunday=6
+    return datetime.now(timezone.utc) - timedelta(hours=4)
+
+
+def _is_market_hours() -> bool:
+    """Return True if within active trading window (Mon–Fri, 9:15–16:00 ET)."""
+    et = _et_now()
+    if et.weekday() >= 5:      # Saturday=5, Sunday=6
         return False
-    return MARKET_OPEN <= et_now.time() <= MARKET_CLOSE
+    return MARKET_OPEN <= et.time() <= MARKET_CLOSE
+
+
+def _seconds_until_market_open() -> float:
+    """
+    Return seconds until the next 9:15 AM ET on a weekday.
+    Called when outside market hours so the loop can sleep precisely.
+    """
+    from datetime import timedelta
+    et = _et_now()
+    # Find next weekday at MARKET_OPEN
+    days_ahead = 0
+    while True:
+        candidate = (et + timedelta(days=days_ahead)).replace(
+            hour=MARKET_OPEN.hour, minute=MARKET_OPEN.minute, second=0, microsecond=0
+        )
+        if candidate > et and candidate.weekday() < 5:
+            break
+        days_ahead += 1
+        if days_ahead > 7:   # Safety: never loop more than a week
+            return 3600.0
+
+    return (candidate - et).total_seconds()
 
 log = structlog.get_logger(__name__)
 
@@ -119,6 +144,16 @@ async def run_agent_loop() -> None:
 
     try:
         while True:
+            # ── Gate: only run during market hours ─────────────────────
+            if not _is_market_hours():
+                wait = _seconds_until_market_open()
+                log.info(
+                    "outside_market_hours_sleeping",
+                    resume_in_minutes=round(wait / 60, 1),
+                )
+                await asyncio.sleep(wait)
+                continue
+
             log.info("agent_cycle_start")
             try:
                 async for chunk in graph.astream(state, config=config):
@@ -136,14 +171,11 @@ async def run_agent_loop() -> None:
 
             except Exception as cycle_exc:
                 log.error("agent_cycle_error", error=str(cycle_exc), exc_info=True)
-                # Don't crash the loop — sleep and retry next cycle
                 state["error"] = str(cycle_exc)
                 state["next_node"] = "ingestion"
 
-            # ── Scenario 3: wait 15 minutes between cycles ──
+            # ── Wait 15 minutes before next scan ───────────────────────
             await asyncio.sleep(SCAN_INTERVAL_SECONDS)
-            if not _is_market_hours():
-                log.info("outside_market_hours_skipping_cycle")
 
     except asyncio.CancelledError:
         log.info("agent_loop_cancelled")
