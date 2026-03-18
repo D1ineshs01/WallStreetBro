@@ -193,13 +193,13 @@ async def run_api() -> None:
     port = int(os.environ.get("FASTAPI_PORT", 8000))
     config = uvicorn.Config(
         app,
-        host="0.0.0.0",
+        host="::",          # Dual-stack: accepts both IPv4 (127.0.0.1) and IPv6 (::1)
         port=port,
         log_level="info",
         access_log=True,
     )
     server = uvicorn.Server(config)
-    log.info("fastapi_starting", host="0.0.0.0", port=port)
+    log.info("fastapi_starting", host="::", port=port)
     await server.serve()
 
 

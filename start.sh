@@ -1,43 +1,40 @@
 #!/bin/bash
-# Wall Street Bro — Railway startup
-# FastAPI: port 8000 (internal) — starts first, Streamlit waits for it
-# Agent loop: background — isolated, crashes don't affect dashboard
-# Streamlit: $PORT (Railway's public port, foreground)
+# Wall Street Bro — Railway startup script
+# FastAPI on $PORT (Railway's public port — passes health checks)
+# Streamlit on 8501 (internal — calls FastAPI via localhost:$PORT)
+# API_BASE_URL is set from Railway Variables (or defaults to localhost:$PORT)
 
-export FASTAPI_PORT=8000
-export API_BASE_URL="http://127.0.0.1:8000"
+set -e
 
-# Start FastAPI first — log output so Railway captures any crash reason
-echo "[start.sh] Starting FastAPI on port 8000..."
-python main.py --mode api &
+export FASTAPI_PORT=${PORT:-8000}
+
+# If API_BASE_URL not set in Railway Variables, default to localhost
+if [ -z "$API_BASE_URL" ]; then
+    export API_BASE_URL="http://localhost:${FASTAPI_PORT}"
+fi
+
+echo "Starting FastAPI on port $FASTAPI_PORT..."
+echo "Streamlit will call FastAPI at: $API_BASE_URL"
+python main.py --mode all &
 FASTAPI_PID=$!
 
-# Start agent loop separately
-echo "[start.sh] Starting agent loop..."
-python main.py --mode agent &
-
-# Wait until FastAPI is healthy before starting Streamlit
-# This prevents "Connection refused" on first page load
-echo "[start.sh] Waiting for FastAPI to be ready..."
+# Wait for FastAPI to be ready before starting Streamlit
+echo "Waiting for FastAPI to be ready..."
 for i in $(seq 1 30); do
-    if curl -sf http://localhost:8000/health > /dev/null 2>&1; then
-        echo "[start.sh] FastAPI ready after ${i}s"
+    if curl -sf "http://localhost:${FASTAPI_PORT}/health" > /dev/null 2>&1; then
+        echo "FastAPI ready after ${i}s"
         break
     fi
-    if ! kill -0 $FASTAPI_PID 2>/dev/null; then
-        echo "[start.sh] ERROR: FastAPI process died (PID $FASTAPI_PID). Check logs above."
-        # Still start Streamlit so the container stays alive for debugging
-        break
-    fi
-    echo "[start.sh] Waiting... ${i}s"
     sleep 1
 done
 
-# Start Streamlit in foreground on Railway's public port
-echo "[start.sh] Starting Streamlit on port ${PORT:-8501}..."
-exec streamlit run dashboard/frontend/Dashboard.py \
-    --server.port "${PORT:-8501}" \
+echo "Starting Streamlit on port 8501..."
+streamlit run dashboard/frontend/Dashboard.py \
+    --server.port 8501 \
     --server.address "0.0.0.0" \
     --server.headless true \
     --server.enableCORS false \
-    --server.enableXsrfProtection false
+    --server.enableXsrfProtection false &
+STREAMLIT_PID=$!
+
+wait -n $FASTAPI_PID $STREAMLIT_PID
