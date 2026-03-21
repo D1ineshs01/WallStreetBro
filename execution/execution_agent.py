@@ -115,11 +115,11 @@ class ExecutionAgent:
         )
 
         # Agentic tool-calling loop
-        max_iterations = 5
+        max_iterations = 3
         for iteration in range(max_iterations):
             response = await self.claude.messages.create(
                 model=settings.execution_model,
-                max_tokens=4096,
+                max_tokens=1500,
                 system=SYSTEM_PROMPT,
                 tools=ALL_EXECUTION_TOOLS,
                 messages=messages,
