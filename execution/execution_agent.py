@@ -59,7 +59,6 @@ Before placing any order, reason through:
 - Never exceed max_position_size_usd from account settings.
 
 ## Hard Rules (NON-NEGOTIABLE)
-- NEVER execute if the kill switch Redis flag is active.
 - NEVER place an order without first checking buying power.
 - For limit orders: buy no more than 1% above ask, sell no less than 1% below bid.
 - Always include rationale in the place_order call for the audit log.
@@ -93,16 +92,6 @@ class ExecutionAgent:
         Process a trade signal through Claude Opus.
         Returns a TradeExecution record if an order was placed, else None.
         """
-        # Fast kill switch check before calling LLM
-        try:
-            from execution.risk import RiskEngine
-            enabled = await self.redis.get_execution_status()
-            if not enabled:
-                raise KillSwitchActivatedError("Kill switch active — skipping signal.")
-        except KillSwitchActivatedError as exc:
-            log.warning("execution_skipped_kill_switch", signal_id=signal["signal_id"], reason=str(exc))
-            return None
-
         user_message = self._format_signal_message(signal, state)
         messages = [{"role": "user", "content": user_message}]
         order_result = None
@@ -215,8 +204,6 @@ class ExecutionAgent:
 ### Current Portfolio State
 - Portfolio Value: ${state.get('current_portfolio_value', 0):,.2f}
 - Drawdown: {state.get('drawdown_pct', 0):.1%}
-- Kill Switch Active: {state.get('kill_switch_active', False)}
-
 ### Your Task
 1. Check account and get a live quote for {signal['symbol']}.
 2. Perform a full risk-to-reward analysis based on the market intelligence above.

@@ -84,7 +84,6 @@ async def run_agent_loop() -> None:
     from config.settings import settings
     from core.redis_client import get_redis
     from core.state import initial_state
-    from kill_switch.monitor import KillSwitchMonitor
     from logging_sinks.postgres_sink import PostgresSink
     from orchestration.graph import build_graph, get_postgres_checkpointer
 
@@ -107,30 +106,6 @@ async def run_agent_loop() -> None:
     db = PostgresSink(settings.database_url)
     await db.init_db()
     log.info("database_initialized")
-
-    # ── Fail-closed: ensure execution is explicitly disabled on startup ─
-    import os
-    current_status = await redis.get_execution_status()
-    if not current_status:
-        if os.environ.get("AUTO_ENABLE_TRADING", "").lower() == "true":
-            await redis.set_execution_status(True)
-            log.info("execution_auto_enabled", hint="AUTO_ENABLE_TRADING=true")
-        else:
-            log.warning(
-                "execution_disabled_on_startup",
-                hint="Run: redis-cli SET agent:execution_status 1  to enable trading",
-            )
-
-    # ── Kill switch monitor (background) ──────────────────────────────
-    from alpaca.trading.client import TradingClient
-    trading_client = TradingClient(
-        api_key=settings.alpaca_api_key,
-        secret_key=settings.alpaca_secret_key,
-        paper=settings.is_paper_trading,
-    )
-    kill_monitor = KillSwitchMonitor(redis, trading_client)
-    monitor_task = asyncio.create_task(kill_monitor.run())
-    log.info("kill_switch_monitor_started")
 
     # ── Build LangGraph with PostgreSQL checkpointer ──────────────────
     checkpointer = await get_postgres_checkpointer(settings.database_url)
@@ -180,7 +155,6 @@ async def run_agent_loop() -> None:
     except asyncio.CancelledError:
         log.info("agent_loop_cancelled")
     finally:
-        monitor_task.cancel()
         await db.close()
 
 

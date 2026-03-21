@@ -56,49 +56,8 @@ with st.sidebar:
     bar_limit = st.slider("Bars", min_value=20, max_value=500, value=100, step=10)
 
     st.divider()
-
-    # ── Kill Switch ────────────────────────────────────────────────────
-    st.subheader("Risk Controls")
-
-    # Read current kill switch state
-    kill_active = False
-    try:
-        resp = requests.get(f"{API_BASE}/portfolio/account", timeout=2)
-        # Status inferred from API availability (kill switch state is in Redis)
-    except Exception:
-        pass
-
-    kill_col1, kill_col2 = st.columns(2)
-    with kill_col1:
-        if st.button("🛑 HALT TRADING", type="primary", use_container_width=True):
-            try:
-                r = requests.post(f"{API_BASE}/portfolio/kill-switch/activate", timeout=5)
-                if r.status_code == 200:
-                    st.success("Kill switch activated!")
-                    st.session_state["kill_switch_active"] = True
-            except Exception as exc:
-                st.error(f"Failed: {exc}")
-
-    with kill_col2:
-        if st.button("▶ CLEAR KILL", use_container_width=True):
-            try:
-                r = requests.post(f"{API_BASE}/portfolio/kill-switch/deactivate", timeout=5)
-                if r.status_code == 200:
-                    st.success("Manual kill cleared.")
-                    st.session_state["kill_switch_active"] = False
-            except Exception as exc:
-                st.error(f"Failed: {exc}")
-
-    if st.session_state.get("kill_switch_active"):
-        st.warning("⚠️ KILL SWITCH ACTIVE — Trading halted")
-
-    st.divider()
     st.caption(f"Auto-refresh #{count} | {symbol} / {timeframe}")
 
-
-# ── Kill switch banner ─────────────────────────────────────────────────
-if st.session_state.get("kill_switch_active"):
-    st.error("🛑 KILL SWITCH ACTIVE — All trading has been halted")
 
 # ── Header ─────────────────────────────────────────────────────────────
 st.title("Wall Street Bro — Trading Intelligence Dashboard")

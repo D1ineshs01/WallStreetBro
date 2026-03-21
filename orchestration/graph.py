@@ -12,7 +12,6 @@ from core.state import AgentState
 from orchestration.nodes import (
     execution_node,
     ingestion_node,
-    kill_switch_node,
     route_from_supervisor,
     supervisor_node,
     visualization_node,
@@ -39,8 +38,6 @@ def build_graph(checkpointer=None):
     graph.add_node("ingestion", ingestion_node)
     graph.add_node("execution", execution_node)
     graph.add_node("visualization", visualization_node)
-    graph.add_node("kill_switch_handler", kill_switch_node)
-
     # ── Entry point ────────────────────────────────────────────────────
     graph.set_entry_point("supervisor")
 
@@ -52,7 +49,6 @@ def build_graph(checkpointer=None):
             "ingestion": "ingestion",
             "execution": "execution",
             "visualization": "visualization",
-            "kill_switch": "kill_switch_handler",
             "end": END,
         },
     )
@@ -61,8 +57,6 @@ def build_graph(checkpointer=None):
     graph.add_edge("ingestion", "supervisor")
     graph.add_edge("execution", "supervisor")
     graph.add_edge("visualization", "supervisor")
-    graph.add_edge("kill_switch_handler", END)
-
     # ── Compile with optional checkpointer ────────────────────────────
     compiled = graph.compile(checkpointer=checkpointer)
     log.info("langgraph_compiled", checkpointer=type(checkpointer).__name__ if checkpointer else "None")

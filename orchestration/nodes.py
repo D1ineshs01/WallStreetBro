@@ -91,16 +91,6 @@ async def execution_node(state: AgentState) -> dict:
 
     redis = await get_redis()
 
-    # Hard kill switch check — Redis is the authoritative source
-    if state.get("kill_switch_active"):
-        log.warning("execution_node_blocked_kill_switch_active")
-        return {"error": "Execution blocked: kill switch active"}
-
-    enabled = await redis.get_execution_status()
-    if not enabled:
-        log.warning("execution_node_blocked_redis_flag")
-        return {"kill_switch_active": True, "execution_enabled": False}
-
     signals = state.get("trade_signals", [])
     already_executed_ids = {e["signal_id"] for e in state.get("trade_executions", [])}
     pending = [s for s in signals if s["signal_id"] not in already_executed_ids]
@@ -147,7 +137,6 @@ async def visualization_node(state: AgentState) -> dict:
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "portfolio_value": state.get("current_portfolio_value", 0),
         "drawdown_pct": state.get("drawdown_pct", 0),
-        "kill_switch_active": state.get("kill_switch_active", False),
         "events_count": len(state.get("market_events", [])),
         "signals_count": len(state.get("trade_signals", [])),
         "executions_count": len(state.get("trade_executions", [])),
@@ -159,38 +148,6 @@ async def visualization_node(state: AgentState) -> dict:
     return {}
 
 
-async def kill_switch_node(state: AgentState) -> dict:
-    """
-    Emergency halt. Sets Redis kill flag and cancels all open orders.
-    Only reached when supervisor routes to "kill_switch".
-    """
-    from alpaca.trading.client import TradingClient
-    from config.settings import settings
-    from core.redis_client import get_redis
-
-    redis = await get_redis()
-
-    trading = TradingClient(
-        api_key=settings.alpaca_api_key,
-        secret_key=settings.alpaca_secret_key,
-        paper=settings.is_paper_trading,
-    )
-
-    await redis.set_execution_status(False)
-
-    try:
-        cancelled = trading.cancel_orders()
-        count = len(cancelled) if cancelled else 0
-        log.critical("kill_switch_node_cancelled_orders", count=count)
-    except Exception as exc:
-        log.error("kill_switch_cancel_failed", error=str(exc))
-
-    return {
-        "kill_switch_active": True,
-        "execution_enabled": False,
-        "next_node": "end",
-    }
-
 
 def route_from_supervisor(state: AgentState) -> str:
     """
@@ -198,7 +155,7 @@ def route_from_supervisor(state: AgentState) -> str:
     Maps state["next_node"] to a registered node name.
     """
     next_node = state.get("next_node", "end")
-    valid_nodes = {"ingestion", "execution", "visualization", "kill_switch", "end"}
+    valid_nodes = {"ingestion", "execution", "visualization", "end"}
     if next_node not in valid_nodes:
         log.warning("invalid_next_node", next_node=next_node, falling_back_to="end")
         return "end"

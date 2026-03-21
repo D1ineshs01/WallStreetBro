@@ -27,12 +27,11 @@ ROUTE_DECISION_TOOL = {
         "properties": {
             "next_node": {
                 "type": "string",
-                "enum": ["ingestion", "execution", "visualization", "kill_switch", "end"],
+                "enum": ["ingestion", "execution", "visualization", "end"],
                 "description": (
                     "ingestion: scan for new market events. "
                     "execution: a validated trade signal is ready to execute. "
                     "visualization: update the dashboard with new data. "
-                    "kill_switch: emergency halt — only if kill_switch_active is True. "
                     "end: no action needed, cycle complete."
                 ),
             },
@@ -56,12 +55,11 @@ Your only job is to decide which subsystem should act next, based on the current
 
 ## Decision Rules
 
-1. **kill_switch_active = True** → route to "kill_switch" (only this flag, not event severity)
-2. **Pending trade signals exist** → route to "execution" — always, even during volatile/critical events
-3. **CRITICAL or HIGH severity events exist but no signals yet** → route to "ingestion" to generate signals
-4. **No recent market data** → route to "ingestion"
-5. **Dashboard not updated** → route to "visualization"
-6. **All caught up** → route to "end"
+1. **Pending trade signals exist** → route to "execution" — always, even during volatile/critical events
+2. **CRITICAL or HIGH severity events exist but no signals yet** → route to "ingestion" to generate signals
+3. **No recent market data** → route to "ingestion"
+4. **Dashboard not updated** → route to "visualization"
+5. **All caught up** → route to "end"
 
 ## Philosophy
 Volatile markets create the BEST trading opportunities — do not avoid them.
@@ -70,7 +68,6 @@ The execution agent is responsible for risk/reward analysis on each individual t
 Your job is simply to route to "execution" whenever signals exist.
 
 ## What to avoid
-- NEVER route to "kill_switch" because of a market event severity — only route there if kill_switch_active = True
 - NEVER route to "end" if there are unexecuted trade signals
 - Do NOT be conservative during volatile periods — route to "execution" aggressively
 """
@@ -141,8 +138,6 @@ class SupervisorAgent:
 
         return f"""## Current System State
 
-**Kill Switch Active:** {state.get('kill_switch_active', False)}
-**Execution Enabled:** {state.get('execution_enabled', False)}
 **Iteration Count:** {state.get('iteration_count', 0)}
 **Last Error:** {state.get('error') or 'None'}
 

@@ -129,24 +129,3 @@ async def get_order_history(limit: int = 50):
         raise HTTPException(status_code=500, detail=str(exc))
     finally:
         await sink.close()
-
-
-@router.post("/kill-switch/{action}")
-async def set_kill_switch(action: str, request: Request):
-    """
-    Manual kill switch toggle from the dashboard.
-    action: "activate" or "deactivate"
-    """
-    if action not in ("activate", "deactivate"):
-        raise HTTPException(status_code=400, detail="action must be 'activate' or 'deactivate'")
-
-    redis = request.app.state.redis
-    if action == "activate":
-        await redis.set_execution_status(False)
-        await redis.set_manual_kill(True)
-        return {"status": "kill_switch_activated"}
-    else:
-        await redis.set_manual_kill(False)
-        # Note: execution status is NOT automatically re-enabled.
-        # Operator must explicitly re-enable trading after reviewing.
-        return {"status": "manual_kill_cleared", "note": "Set execution_status=1 in Redis to resume trading"}

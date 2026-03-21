@@ -26,7 +26,7 @@ from alpaca.data.requests import StockLatestQuoteRequest, StockBarsRequest
 from alpaca.data.timeframe import TimeFrame, TimeFrameUnit
 
 from config.settings import settings
-from core.exceptions import AlpacaExecutionError, KillSwitchActivatedError
+from core.exceptions import AlpacaExecutionError
 from core.redis_client import RedisClient
 from core.state import AgentState
 from execution.risk import RiskEngine
@@ -99,9 +99,6 @@ class AlpacaMCPServer:
         try:
             result = await handler(tool_input) if tool_name not in ("place_order",) else await handler(tool_input)
             return json.dumps(result, default=str)
-        except KillSwitchActivatedError as exc:
-            log.error("kill_switch_blocked_order", tool=tool_name, error=str(exc))
-            return json.dumps({"error": "KILL_SWITCH_ACTIVE", "message": str(exc)})
         except Exception as exc:
             log.error("tool_handler_error", tool=tool_name, error=str(exc))
             return json.dumps({"error": str(exc)})
